@@ -13,7 +13,7 @@ Integrantes: Alexia Duffó, Angel Fajardo, Estefano Ludeña y Luis Fabián Rodri
 |---|---|
 | `energydata_complete.csv` | Datos originales (19 735 registros, 29 variables) |
 | `Modelo_ia_prediccion_consumo.ows` | Workflow de Orange 3.41 (preparación, exploración, 6 modelos y evaluación) |
-| `app.py` | Prototipo web *EnergyPredict AI* (Streamlit) |
+| `app.py` | Prototipo web *EnergyPredict AI* (Streamlit): estima el consumo mensual (kWh/mes) y su nivel |
 | `requirements.txt` | Bibliotecas necesarias para el prototipo |
 | `figuras/` | Figuras del informe y capturas de Orange |
 | `LEEME.txt` | Instrucciones detalladas |
