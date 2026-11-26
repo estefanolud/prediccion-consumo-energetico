@@ -2,6 +2,8 @@
 
 Datos: Candanedo, Feldheim y Deramaix (2017), "Appliances Energy Prediction".
 Modelo: Random Forest (100 árboles), el mejor modelo según la comparación hecha en Orange.
+El modelo predice el consumo de cada intervalo de 10 minutos; la app suma las predicciones de las
+24 horas del día y las multiplica por 30 días para estimar el consumo mensual.
 Código generado con apoyo de inteligencia artificial (Claude, Anthropic) y revisado por el equipo.
 
 Ejecutar:  streamlit run app.py   (el archivo energydata_complete.csv debe estar en la misma carpeta)
@@ -17,7 +19,7 @@ from sklearn.model_selection import train_test_split
 
 DATA = Path(__file__).parent / "energydata_complete.csv"
 ROOMS = [1, 2, 3, 4, 5, 7, 8, 9]          # ambientes interiores (T6/RH_6 están fuera de la casa)
-LOW, HIGH = 60, 200                       # límites de nivel: mediana y ~percentil 90 del consumo
+LOW, HIGH = 400, 625                      # kWh/mes: mediana y ~percentil 90 del consumo diario x 30 días
 
 
 @st.cache_data
@@ -54,10 +56,10 @@ def build_row(df, hora, lights, t_in, rh_in, t_out, rh_out, wind, press, vis, de
     return row
 
 
-def nivel(wh):
-    if wh <= LOW:
+def nivel(kwh_mes):
+    if kwh_mes <= LOW:
         return "BAJO", "#2e7d32"
-    if wh <= HIGH:
+    if kwh_mes <= HIGH:
         return "MEDIO", "#f9a825"
     return "ALTO", "#c62828"
 
@@ -89,22 +91,27 @@ with st.expander("Opciones avanzadas (por defecto, valores típicos del conjunto
     dew = st.number_input("Punto de rocío (°C)", -7.0, 16.0, float(round(med["Tdewpoint"], 1)))
 
 if st.button("🔮 Predecir consumo", type="primary", use_container_width=True):
-    row = build_row(df, hora, lights, t_in, rh_in, t_out, rh_out, wind, press, vis, dew)
-    pred = float(model.predict(pd.DataFrame([row])[cols])[0])
-    txt, color = nivel(pred)
+    rows = [build_row(df, h, lights, t_in, rh_in, t_out, rh_out, wind, press, vis, dew) for h in range(24)]
+    wh10 = model.predict(pd.DataFrame(rows)[cols])          # Wh en 10 minutos, para cada hora
+    wh_hora = wh10 * 6                                       # Wh en cada hora
+    kwh_dia = wh_hora.sum() / 1000
+    kwh_mes = kwh_dia * 30
+    txt, color = nivel(kwh_mes)
     st.subheader("2. Resultado")
     st.markdown(
         f"<div style='padding:18px;border-radius:10px;background:{color}1a;border:2px solid {color}'>"
-        f"<div style='font-size:15px'>Consumo estimado de los electrodomésticos</div>"
-        f"<div style='font-size:40px;font-weight:700'>{pred:.0f} Wh</div>"
-        f"<div style='font-size:18px;color:{color};font-weight:700'>Nivel de consumo: {txt}</div></div>",
+        f"<div style='font-size:15px'>Consumo mensual estimado de los electrodomésticos</div>"
+        f"<div style='font-size:40px;font-weight:700'>{kwh_mes:.0f} kWh/mes</div>"
+        f"<div style='font-size:18px;color:{color};font-weight:700'>Nivel de consumo: {txt}</div>"
+        f"<div style='font-size:15px;margin-top:6px'>Equivale a {kwh_dia:.1f} kWh por día. A las {hora} h: "
+        f"{wh10[hora]:.0f} Wh cada 10 minutos ({wh_hora[hora] / 1000:.2f} kWh en esa hora).</div></div>",
         unsafe_allow_html=True)
-    st.caption(f"Bajo: hasta {LOW} Wh (mediana) · Medio: {LOW}–{HIGH} Wh · Alto: más de {HIGH} Wh (≈10 % de los registros)")
+    st.caption(f"Bajo: hasta {LOW} kWh/mes (mediana) · Medio: {LOW}–{HIGH} kWh/mes · "
+               f"Alto: más de {HIGH} kWh/mes (≈10 % de los días con más consumo). "
+               "Se calcula con 30 días iguales, con las condiciones ingresadas durante las 24 horas.")
 
-    rows = [build_row(df, h, lights, t_in, rh_in, t_out, rh_out, wind, press, vis, dew) for h in range(24)]
-    perfil = pd.DataFrame({"Hora": range(24),
-                           "Consumo estimado (Wh)": model.predict(pd.DataFrame(rows)[cols])}).set_index("Hora")
-    st.markdown("**Consumo estimado durante el día con las mismas condiciones**")
+    perfil = pd.DataFrame({"Hora": range(24), "Consumo por hora (Wh)": wh_hora}).set_index("Hora")
+    st.markdown("**Consumo estimado por hora con las mismas condiciones**")
     st.bar_chart(perfil)
 
 with st.expander("Desempeño del modelo (25 % de datos de prueba)"):
